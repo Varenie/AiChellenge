@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ru.varenie.aichellenge.domain.models.ChatUiMessage
-import ru.varenie.aichellenge.domain.models.GeminiMessage
 import ru.varenie.aichellenge.domain.usecase.SendMessageUseCase
 import javax.inject.Inject
 
@@ -30,6 +29,7 @@ class ChatViewModel @Inject constructor(
     fun onEvent(event: ChatEvent) {
         when(event) {
             is ChatEvent.SendMessage -> sendMessage(event.text)
+            is ChatEvent.ToggleRaw -> toggleRaw(event.message)
         }
     }
 
@@ -41,17 +41,10 @@ class ChatViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val assistantText = sendMessageUseCase(text)
-
-                val geminiMessage = ChatUiMessage(
-                    text = assistantText,
-                    isUser = false
-                )
-
+                val assistantMessage = sendMessageUseCase(text)
                 _state.update {
-                    it.copy(messages = it.messages + geminiMessage, isLoading = false)
+                    it.copy(messages = it.messages + assistantMessage, isLoading = false)
                 }
-
             } catch (e: Exception) {
                 _state.update { it.copy(isLoading = false) }
                 _effect.emit(ChatEffect.ShowError(e.message ?: "Unknown error"))
@@ -59,7 +52,16 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    fun toggleRaw(message: ChatUiMessage) {
+        _state.update {
+            val newMessages = it.messages.map { m ->
+                if (m == message) m.copy(showRaw = !m.showRaw) else m
+            }
+            it.copy(messages = newMessages)
+        }
+    }
 }
+
 
 
 data class ChatState(
@@ -70,7 +72,9 @@ data class ChatState(
 
 sealed class ChatEvent {
     data class SendMessage(val text: String) : ChatEvent()
+    data class ToggleRaw(val message: ChatUiMessage) : ChatEvent()
 }
+
 
 sealed class ChatEffect {
     data class ShowError(val message: String) : ChatEffect()

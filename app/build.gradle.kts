@@ -29,8 +29,10 @@ android {
             }
         }
 
-        val geminiApiKey = localProps.getProperty("GEMINI_API_KEY")  ?: ""
-        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
+//        val geminiApiKey = localProps.getProperty("GEMINI_API_KEY")  ?: ""
+        val openAiApiKey = localProps.getProperty("OPENAI_API_KEY") ?: ""
+//        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
+        buildConfigField("String", "OPENAI_API_KEY", "\"$openAiApiKey\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

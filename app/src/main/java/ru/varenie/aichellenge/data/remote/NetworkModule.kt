@@ -33,19 +33,20 @@ object NetworkModule {
     @Singleton
     fun provideRetrofit(client: OkHttpClient): Retrofit =
         Retrofit.Builder()
-            .baseUrl("https://generativelanguage.googleapis.com/")
+            .baseUrl("https://api.openai.com/v1/")
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
 
-    @Provides
-    @Singleton
-    fun provideGeminiApi(retrofit: Retrofit): GeminiApi =
-        retrofit.create(GeminiApi::class.java)
 
     @Provides
     @Singleton
-    fun provideRepository(api: GeminiApi): GeminiRepository = GeminiRepositoryImpl(api)
+    fun provideOpenAiApi(retrofit: Retrofit): OpenAiApi =
+        retrofit.create(OpenAiApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideRepository(api: OpenAiApi): GeminiRepository = GeminiRepositoryImpl(api)
 
     @Provides
     @Singleton

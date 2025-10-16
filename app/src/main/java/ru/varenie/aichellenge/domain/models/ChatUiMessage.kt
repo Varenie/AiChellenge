@@ -4,6 +4,8 @@ import java.util.UUID
 
 data class ChatUiMessage(
     val id: String = UUID.randomUUID().toString(),
-    val text: String,
-    val isUser: Boolean
+    val text: String,            // исходный текст/JSON
+    val isUser: Boolean,
+    val mealResponse: MealResponse? = null, // распарсенный объект (если есть)
+    val showRaw: Boolean = false           // флаг для показа сырого текста
 )
