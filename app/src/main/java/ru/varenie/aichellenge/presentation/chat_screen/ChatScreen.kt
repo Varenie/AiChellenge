@@ -26,6 +26,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -37,27 +39,50 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import ru.varenie.aichellenge.R
 import ru.varenie.aichellenge.domain.models.ChatUiMessage
+import ru.varenie.aichellenge.presentation.util.copyToClipboard
+import ru.varenie.aichellenge.presentation.util.saveAndShareText
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(viewModel: ChatViewModel) {
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(viewModel.effect) {
         viewModel.effect.collect { effect ->
-            if (effect is ChatEffect.ShowError) {
-                snackbarHostState.showSnackbar(effect.message)
+            when (effect) {
+                is ChatEffect.ShowError -> snackbarHostState.showSnackbar(effect.message)
+                is ChatEffect.CopyToClipboard -> {
+                    copyToClipboard(context, effect.content)
+                    scope.launch {
+                        snackbarHostState.showSnackbar("Chat history copied to clipboard")
+                    }
+                }
+
+                is ChatEffect.SaveTechSpec -> {
+                    saveAndShareText(
+                        context = context,
+                        fileName = "tech_spec.md",
+                        content = effect.content,
+                        mimeType = "text/markdown",
+                        chooserTitle = "Share Tech Spec"
+                    )
+                }
             }
         }
     }
@@ -66,12 +91,36 @@ fun ChatScreen(viewModel: ChatViewModel) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Diet Chat") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
+            Column {
+                TopAppBar(
+                    title = {
+                        Text(
+                            when (state.mode) {
+                                ChatMode.DIET -> "Diet Chat"
+                                ChatMode.TECH_SPEC -> "Tech Spec Assistant"
+                            }
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
                 )
-            )
+                TabRow(
+                    selectedTabIndex = state.mode.ordinal,
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Tab(
+                        selected = state.mode == ChatMode.DIET,
+                        onClick = { viewModel.onEvent(ChatEvent.SwitchMode(ChatMode.DIET)) },
+                        text = { Text("Diet") }
+                    )
+                    Tab(
+                        selected = state.mode == ChatMode.TECH_SPEC,
+                        onClick = { viewModel.onEvent(ChatEvent.SwitchMode(ChatMode.TECH_SPEC)) },
+                        text = { Text("Tech Spec") }
+                    )
+                }
+            }
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         contentWindowInsets = WindowInsets.systemBars
@@ -91,9 +140,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(state.messages) { message ->
-                    ChatBubble(message = message) {
-                        viewModel.onEvent(ChatEvent.ToggleRaw(message))
-                    }
+                    ChatBubble(message = message, onEvent = viewModel::onEvent)
                 }
             }
 
@@ -143,7 +190,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
 }
 
 @Composable
-fun ChatBubble(message: ChatUiMessage, onToggleRaw: () -> Unit) {
+fun ChatBubble(message: ChatUiMessage, onEvent: (ChatEvent) -> Unit) {
     val alignment = if (message.isUser) Alignment.End else Alignment.Start
     val color = if (message.isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val textColor = if (message.isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
@@ -170,7 +217,7 @@ fun ChatBubble(message: ChatUiMessage, onToggleRaw: () -> Unit) {
                             modifier = Modifier.weight(1f)
                         )
                         IconButton(
-                            onClick = onToggleRaw,
+                            onClick = { onEvent(ChatEvent.ToggleRaw(message)) },
                             modifier = Modifier.size(24.dp)
                         ) {
                             Icon(
@@ -248,8 +295,16 @@ fun ChatBubble(message: ChatUiMessage, onToggleRaw: () -> Unit) {
                     }
                 }
             } else {
-                // Сообщение пользователя
-                Text(text = message.text, color = textColor)
+                // Сообщение пользователя или ассистента в режиме ТЗ
+                Column {
+                    Text(text = message.text, color = textColor)
+                    if (!message.isUser && message.techSpecStep == "generate_tz") {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(onClick = { onEvent(ChatEvent.RequestSaveTechSpec(message.text)) }) {
+                            Text("Save to file")
+                        }
+                    }
+                }
             }
         }
     }

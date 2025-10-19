@@ -8,8 +8,9 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
-import ru.varenie.aichellenge.data.repository.GeminiRepositoryImpl
-import ru.varenie.aichellenge.domain.repository.GeminiRepository
+import ru.varenie.aichellenge.data.repository.OpenAiRepositoryImpl
+import ru.varenie.aichellenge.domain.repository.OpenAiRepository
+import ru.varenie.aichellenge.domain.usecase.GenerateTechSpecUseCase
 import ru.varenie.aichellenge.domain.usecase.SendMessageUseCase
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
@@ -46,10 +47,15 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideRepository(api: OpenAiApi): GeminiRepository = GeminiRepositoryImpl(api)
+    fun provideRepository(api: OpenAiApi): OpenAiRepository = OpenAiRepositoryImpl(api)
 
     @Provides
     @Singleton
-    fun provideSendMessageUseCase(repository: GeminiRepository): SendMessageUseCase =
+    fun provideSendMessageUseCase(repository: OpenAiRepository): SendMessageUseCase =
         SendMessageUseCase(repository)
+
+    @Provides
+    @Singleton
+    fun provideGenerateTechSpecUseCase(repository: OpenAiRepository): GenerateTechSpecUseCase =
+        GenerateTechSpecUseCase(repository)
 }

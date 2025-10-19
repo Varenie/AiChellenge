@@ -7,5 +7,6 @@ data class ChatUiMessage(
     val text: String,            // исходный текст/JSON
     val isUser: Boolean,
     val mealResponse: MealResponse? = null, // распарсенный объект (если есть)
+    val techSpecStep: String? = null,      // шаг в сценарии ТЗ
     val showRaw: Boolean = false           // флаг для показа сырого текста
 )

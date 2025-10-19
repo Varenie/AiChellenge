@@ -12,12 +12,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ru.varenie.aichellenge.domain.models.ChatUiMessage
+import ru.varenie.aichellenge.domain.usecase.GenerateTechSpecUseCase
 import ru.varenie.aichellenge.domain.usecase.SendMessageUseCase
 import javax.inject.Inject
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(
-    private val sendMessageUseCase: SendMessageUseCase
+    private val sendMessageUseCase: SendMessageUseCase,
+    private val generateTechSpecUseCase: GenerateTechSpecUseCase
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatState())
@@ -30,7 +32,27 @@ class ChatViewModel @Inject constructor(
         when(event) {
             is ChatEvent.SendMessage -> sendMessage(event.text)
             is ChatEvent.ToggleRaw -> toggleRaw(event.message)
+            is ChatEvent.SwitchMode -> switchMode(event.mode)
+            is ChatEvent.ExportChatToClipboard -> exportChatToClipboard()
+            is ChatEvent.RequestSaveTechSpec -> {
+                viewModelScope.launch {
+                    _effect.emit(ChatEffect.SaveTechSpec(event.content))
+                }
+            }
         }
+    }
+
+    private fun exportChatToClipboard() {
+        viewModelScope.launch {
+            val history = _state.value.messages.joinToString("\n") { msg ->
+                if (msg.isUser) "User: ${msg.text}" else "Assistant: ${msg.text}"
+            }
+            _effect.emit(ChatEffect.CopyToClipboard(history))
+        }
+    }
+
+    private fun switchMode(mode: ChatMode) {
+        _state.update { it.copy(mode = mode, messages = emptyList(), memory = "") }
     }
 
     private fun sendMessage(text: String) {
@@ -41,9 +63,26 @@ class ChatViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val assistantMessage = sendMessageUseCase(text)
+                val assistantMessage = when (_state.value.mode) {
+                    ChatMode.DIET -> sendMessageUseCase(text)
+                    ChatMode.TECH_SPEC -> {
+                        val currentMemory = _state.value.memory
+                        generateTechSpecUseCase(text, currentMemory)
+                    }
+                }
+
+                val newMemory = if (_state.value.mode == ChatMode.TECH_SPEC) {
+                    _state.value.memory + "User: " + text + "\n" + "Assistant: " + assistantMessage.text + "\n"
+                } else {
+                    _state.value.memory
+                }
+
                 _state.update {
-                    it.copy(messages = it.messages + assistantMessage, isLoading = false)
+                    it.copy(
+                        messages = it.messages + assistantMessage,
+                        isLoading = false,
+                        memory = newMemory
+                    )
                 }
             } catch (e: Exception) {
                 _state.update { it.copy(isLoading = false) }
@@ -62,20 +101,30 @@ class ChatViewModel @Inject constructor(
     }
 }
 
-
+enum class ChatMode {
+    DIET,
+    TECH_SPEC
+}
 
 data class ChatState(
     val messages: List<ChatUiMessage> = emptyList(),
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val mode: ChatMode = ChatMode.DIET,
+    val memory: String = ""
 )
 
 sealed class ChatEvent {
     data class SendMessage(val text: String) : ChatEvent()
     data class ToggleRaw(val message: ChatUiMessage) : ChatEvent()
+    data class SwitchMode(val mode: ChatMode) : ChatEvent()
+    object ExportChatToClipboard : ChatEvent()
+    data class RequestSaveTechSpec(val content: String) : ChatEvent()
 }
 
 
 sealed class ChatEffect {
     data class ShowError(val message: String) : ChatEffect()
+    data class CopyToClipboard(val content: String) : ChatEffect()
+    data class SaveTechSpec(val content: String) : ChatEffect()
 }
