@@ -13,13 +13,15 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ru.varenie.aichellenge.domain.models.ChatUiMessage
 import ru.varenie.aichellenge.domain.usecase.GenerateTechSpecUseCase
+import ru.varenie.aichellenge.domain.usecase.SendCustomMessageUseCase
 import ru.varenie.aichellenge.domain.usecase.SendMessageUseCase
 import javax.inject.Inject
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     private val sendMessageUseCase: SendMessageUseCase,
-    private val generateTechSpecUseCase: GenerateTechSpecUseCase
+    private val generateTechSpecUseCase: GenerateTechSpecUseCase,
+    private val sendCustomMessageUseCase: SendCustomMessageUseCase
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatState())
@@ -39,7 +41,17 @@ class ChatViewModel @Inject constructor(
                     _effect.emit(ChatEffect.SaveTechSpec(event.content))
                 }
             }
+            is ChatEvent.UpdateSystemPrompt -> updateSystemPrompt(event.systemPrompt)
+            is ChatEvent.UpdateTemperature -> updateTemperature(event.temperature)
         }
+    }
+
+    private fun updateTemperature(temperature: Float) {
+        _state.update { it.copy(temperature = temperature) }
+    }
+
+    private fun updateSystemPrompt(systemPrompt: String) {
+        _state.update { it.copy(systemPrompt = systemPrompt) }
     }
 
     private fun exportChatToClipboard() {
@@ -68,6 +80,11 @@ class ChatViewModel @Inject constructor(
                     ChatMode.TECH_SPEC -> {
                         val currentMemory = _state.value.memory
                         generateTechSpecUseCase(text, currentMemory)
+                    }
+                    ChatMode.CUSTOM -> {
+                        val currentSystemPrompt = _state.value.systemPrompt
+                        val currentTemperature = _state.value.temperature
+                        sendCustomMessageUseCase(text, currentSystemPrompt, currentTemperature)
                     }
                 }
 
@@ -103,7 +120,8 @@ class ChatViewModel @Inject constructor(
 
 enum class ChatMode {
     DIET,
-    TECH_SPEC
+    TECH_SPEC,
+    CUSTOM
 }
 
 data class ChatState(
@@ -111,7 +129,9 @@ data class ChatState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val mode: ChatMode = ChatMode.DIET,
-    val memory: String = ""
+    val memory: String = "",
+    val systemPrompt: String = "You are a helpful assistant.",
+    val temperature: Float = 0.7f
 )
 
 sealed class ChatEvent {
@@ -120,6 +140,8 @@ sealed class ChatEvent {
     data class SwitchMode(val mode: ChatMode) : ChatEvent()
     object ExportChatToClipboard : ChatEvent()
     data class RequestSaveTechSpec(val content: String) : ChatEvent()
+    data class UpdateSystemPrompt(val systemPrompt: String) : ChatEvent()
+    data class UpdateTemperature(val temperature: Float) : ChatEvent()
 }
 
 

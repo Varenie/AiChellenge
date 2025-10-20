@@ -62,6 +62,31 @@ $memory
             ?: throw RuntimeException("No response from API")
     }
 
+    override suspend fun sendCustomMessage(
+        message: String,
+        systemPrompt: String,
+        temperature: Float
+    ): String {
+        val response = api.generateCompletion(
+            authHeader = "Bearer ${BuildConfig.OPENAI_API_KEY}",
+            body = ChatGptRequest(
+                model = MODEL_NAME,
+                messages = listOf(
+                    ChatMessage(role = "system", content = systemPrompt),
+                    ChatMessage(role = "user", content = message)
+                ),
+                temperature = temperature
+            )
+        )
+
+        return response.choices
+            .firstOrNull()
+            ?.message
+            ?.content
+            ?.trim()
+            ?: throw RuntimeException("No response from API")
+    }
+
 }
 
 private const val TS_SYSTEM_PROMPT = """

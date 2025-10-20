@@ -1,5 +1,6 @@
 package ru.varenie.aichellenge.presentation.chat_screen
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -88,6 +93,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
     }
 
     val listState = rememberLazyListState()
+    var showCustomSettings by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -98,8 +104,19 @@ fun ChatScreen(viewModel: ChatViewModel) {
                             when (state.mode) {
                                 ChatMode.DIET -> "Diet Chat"
                                 ChatMode.TECH_SPEC -> "Tech Spec Assistant"
+                                ChatMode.CUSTOM -> "Custom Chat"
                             }
                         )
+                    },
+                    actions = {
+                        if (state.mode == ChatMode.CUSTOM) {
+                            IconButton(onClick = { showCustomSettings = !showCustomSettings }) {
+                                Icon(
+                                    imageVector = if (showCustomSettings) Icons.Filled.KeyboardArrowUp else Icons.Filled.Settings,
+                                    contentDescription = "Toggle Custom Settings"
+                                )
+                            }
+                        }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -119,6 +136,11 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         onClick = { viewModel.onEvent(ChatEvent.SwitchMode(ChatMode.TECH_SPEC)) },
                         text = { Text("Tech Spec") }
                     )
+                    Tab(
+                        selected = state.mode == ChatMode.CUSTOM,
+                        onClick = { viewModel.onEvent(ChatEvent.SwitchMode(ChatMode.CUSTOM)) },
+                        text = { Text("Custom") }
+                    )
                 }
             }
         },
@@ -131,6 +153,51 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
         ) {
+            AnimatedVisibility(visible = state.mode == ChatMode.CUSTOM && showCustomSettings) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp)
+                ) {
+                    Text("System Prompt:", style = MaterialTheme.typography.labelMedium)
+                    TextField(
+                        value = state.systemPrompt,
+                        onValueChange = { viewModel.onEvent(ChatEvent.UpdateSystemPrompt(it)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Enter system prompt") },
+                        shape = RoundedCornerShape(16.dp),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Temperature:", style = MaterialTheme.typography.labelMedium)
+                    TextField(
+                        value = state.temperature.toString(),
+                        onValueChange = {
+                            val newTemp = it.toFloatOrNull()
+                            if (newTemp != null && newTemp >= 0f) {
+                                viewModel.onEvent(ChatEvent.UpdateTemperature(newTemp))
+                            } else if (it.isBlank()) {
+                                viewModel.onEvent(ChatEvent.UpdateTemperature(0f)) // Or some default/error state
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Enter temperature (0.0 - N)") },
+                        shape = RoundedCornerShape(16.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent
+                        )
+                    )
+                }
+            }
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
