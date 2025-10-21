@@ -2,37 +2,45 @@ import java.io.FileInputStream
 import java.util.Properties
 
 plugins {
-    alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
-    kotlin("kapt")
-    id("dagger.hilt.android.plugin")
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("kotlin-kapt")
+    id("com.google.dagger.hilt.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
     namespace = "ru.varenie.aichellenge"
-    compileSdk {
-        version = release(36)
+    compileSdk = 36
+
+    buildFeatures {
+        compose = true
+        buildConfig = true
     }
 
     defaultConfig {
         applicationId = "ru.varenie.aichellenge"
-        minSdk = 29
+        minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
-        val localPropsFile = rootProject.file("local.properties")
-        val localProps = Properties().apply {
-            if (localPropsFile.exists()) {
-                load(FileInputStream(localPropsFile))
-            }
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables {
+            useSupportLibrary = true
         }
 
-        val openAiApiKey = localProps.getProperty("OPENAI_API_KEY") ?: ""
-        buildConfigField("String", "OPENAI_API_KEY", "\"$openAiApiKey\"")
+        val localProperties = Properties()
+        val localPropertiesFile = rootProject.file("local.properties")
+        if (localPropertiesFile.exists()) {
+            localProperties.load(FileInputStream(localPropertiesFile))
+        }
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField(
+            "String",
+            "HUGGINGFACE_API_KEY",
+            "\"${localProperties.getProperty("HUGGINGFACE_API_KEY")}\""
+        )
     }
 
     buildTypes {
@@ -51,9 +59,8 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
-    buildFeatures {
-        compose = true
-        buildConfig = true
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.1"
     }
 }
 

@@ -8,5 +8,10 @@ data class ChatUiMessage(
     val isUser: Boolean,
     val mealResponse: MealResponse? = null, // распарсенный объект (если есть)
     val techSpecStep: String? = null,      // шаг в сценарии ТЗ
-    val showRaw: Boolean = false           // флаг для показа сырого текста
+    val showRaw: Boolean = false,           // флаг для показа сырого текста
+    val model: String? = null,
+    val responseTime: Long? = null,
+    val promptTokens: Int? = null,
+    val completionTokens: Int? = null,
+    val finishReason: String? = null
 )

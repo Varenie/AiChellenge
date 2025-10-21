@@ -24,7 +24,17 @@ class ChatViewModel @Inject constructor(
     private val sendCustomMessageUseCase: SendCustomMessageUseCase
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(ChatState())
+    private val models = listOf(
+        ru.varenie.aichellenge.domain.models.Model(
+            "deepseek-ai/DeepSeek-R1:hyperbolic",
+            "DeepSeek"
+        ),
+        ru.varenie.aichellenge.domain.models.Model("openai/gpt-oss-20b", "GPT- 20b"),
+        ru.varenie.aichellenge.domain.models.Model("baidu/ERNIE-4.5-0.3B-PT", "Ernie"),
+    )
+
+    private val _state =
+        MutableStateFlow(ChatState(models = models, selectedModel = models.first()))
     val state: StateFlow<ChatState> = _state.asStateFlow()
 
     private val _effect = MutableSharedFlow<ChatEffect>()
@@ -43,7 +53,17 @@ class ChatViewModel @Inject constructor(
             }
             is ChatEvent.UpdateSystemPrompt -> updateSystemPrompt(event.systemPrompt)
             is ChatEvent.UpdateTemperature -> updateTemperature(event.temperature)
+            is ChatEvent.SelectModel -> selectModel(event.model)
+            is ChatEvent.ToggleModelSelector -> toggleModelSelector()
         }
+    }
+
+    private fun selectModel(model: ru.varenie.aichellenge.domain.models.Model) {
+        _state.update { it.copy(selectedModel = model, isModelSelectorVisible = false) }
+    }
+
+    private fun toggleModelSelector() {
+        _state.update { it.copy(isModelSelectorVisible = !it.isModelSelectorVisible) }
     }
 
     private fun updateTemperature(temperature: Float) {
@@ -88,7 +108,7 @@ class ChatViewModel @Inject constructor(
     }
 
     private suspend fun sendMessageForDiet(text: String) {
-        val assistantMessage = sendMessageUseCase(text)
+        val assistantMessage = sendMessageUseCase(text, _state.value.selectedModel!!.id)
         _state.update {
             it.copy(
                 messages = it.messages + assistantMessage,
@@ -99,7 +119,8 @@ class ChatViewModel @Inject constructor(
 
     private suspend fun sendMessageForTechSpec(text: String) {
         val currentMemory = _state.value.memory
-        val assistantMessage = generateTechSpecUseCase(text, currentMemory)
+        val assistantMessage =
+            generateTechSpecUseCase(text, currentMemory, _state.value.selectedModel!!.id)
         val newMemory =
             _state.value.memory + "User: " + text + "\n" + "Assistant: " + assistantMessage.text + "\n"
 
@@ -115,8 +136,21 @@ class ChatViewModel @Inject constructor(
     private suspend fun sendMessageForCustom(text: String) {
         val currentSystemPrompt = _state.value.systemPrompt
         val currentTemperature = _state.value.temperature
-        val response = sendCustomMessageUseCase(text, currentSystemPrompt, currentTemperature)
-        val assistantMessage = ChatUiMessage(text = response, isUser = false)
+        val generationResult = sendCustomMessageUseCase(
+            text,
+            currentSystemPrompt,
+            currentTemperature,
+            _state.value.selectedModel!!.id
+        )
+        val assistantMessage = ChatUiMessage(
+            text = generationResult.text,
+            isUser = false,
+            model = generationResult.model,
+            responseTime = generationResult.responseTime,
+            promptTokens = generationResult.promptTokens,
+            completionTokens = generationResult.completionTokens,
+            finishReason = generationResult.finishReason
+        )
         val newMemory =
             _state.value.memory + "User: " + text + "\n" + "Assistant: " + assistantMessage.text + "\n"
 
@@ -152,7 +186,10 @@ data class ChatState(
     val mode: ChatMode = ChatMode.DIET,
     val memory: String = "",
     val systemPrompt: String = "You are a helpful assistant.",
-    val temperature: Float = 0.7f
+    val temperature: Float = 0.7f,
+    val models: List<ru.varenie.aichellenge.domain.models.Model> = emptyList(),
+    val selectedModel: ru.varenie.aichellenge.domain.models.Model? = null,
+    val isModelSelectorVisible: Boolean = false
 )
 
 sealed class ChatEvent {
@@ -163,6 +200,8 @@ sealed class ChatEvent {
     data class RequestSaveTechSpec(val content: String) : ChatEvent()
     data class UpdateSystemPrompt(val systemPrompt: String) : ChatEvent()
     data class UpdateTemperature(val temperature: Float) : ChatEvent()
+    data class SelectModel(val model: ru.varenie.aichellenge.domain.models.Model) : ChatEvent()
+    object ToggleModelSelector : ChatEvent()
 }
 
 

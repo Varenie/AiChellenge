@@ -2,6 +2,7 @@ package ru.varenie.aichellenge.presentation.chat_screen
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +22,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -117,6 +120,12 @@ fun ChatScreen(viewModel: ChatViewModel) {
                                 )
                             }
                         }
+                        IconButton(onClick = { viewModel.onEvent(ChatEvent.ToggleModelSelector) }) {
+                            Icon(
+                                imageVector = Icons.Filled.MoreVert,
+                                contentDescription = "Select Model"
+                            )
+                        }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -153,6 +162,15 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
         ) {
+            AnimatedVisibility(visible = state.isModelSelectorVisible) {
+                LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                    items(state.models) { model ->
+                        ModelItem(model = model, isSelected = state.selectedModel == model) {
+                            viewModel.onEvent(ChatEvent.SelectModel(model))
+                        }
+                    }
+                }
+            }
             AnimatedVisibility(visible = state.mode == ChatMode.CUSTOM && showCustomSettings) {
                 Column(
                     modifier = Modifier
@@ -257,6 +275,26 @@ fun ChatScreen(viewModel: ChatViewModel) {
 }
 
 @Composable
+fun ModelItem(
+    model: ru.varenie.aichellenge.domain.models.Model,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = model.name, modifier = Modifier.weight(1f))
+        if (isSelected) {
+            Icon(imageVector = Icons.Filled.Check, contentDescription = "Selected")
+        }
+    }
+}
+
+@Composable
 fun ChatBubble(message: ChatUiMessage, onEvent: (ChatEvent) -> Unit) {
     val alignment = if (message.isUser) Alignment.End else Alignment.Start
     val color = if (message.isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
@@ -348,8 +386,9 @@ fun ChatBubble(message: ChatUiMessage, onEvent: (ChatEvent) -> Unit) {
                                     color = textColor,
                                     modifier = Modifier.width(140.dp)
                                 )
+                                val weight = meal.weightGrams?.toString() ?: "-"
                                 Text(
-                                    "${meal.weightGrams ?: "-"}",
+                                    weight,
                                     color = textColor,
                                     modifier = Modifier.width(60.dp)
                                 )
@@ -374,12 +413,30 @@ fun ChatBubble(message: ChatUiMessage, onEvent: (ChatEvent) -> Unit) {
                 }
             }
         }
+        if (!message.isUser) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Model: ${message.model}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Time: ${message.responseTime?.let { "%.2f s".format(it / 1000f) } ?: "N/A"}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Tokens: P:${message.promptTokens ?: "N/A"} C:${message.completionTokens ?: "N/A"}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Finish: ${message.finishReason ?: "N/A"}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
-
-
-
-
-
-
-

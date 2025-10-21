@@ -1,18 +1,22 @@
 package ru.varenie.aichellenge.domain.usecase
 
 import ru.varenie.aichellenge.domain.models.ChatUiMessage
-import ru.varenie.aichellenge.domain.repository.OpenAiRepository
+import ru.varenie.aichellenge.domain.repository.HuggingFaceRepository
 import java.util.regex.Pattern
 import javax.inject.Inject
 
 class GenerateTechSpecUseCase @Inject constructor(
-    private val repository: OpenAiRepository
+    private val repository: HuggingFaceRepository
 ) {
-    suspend operator fun invoke(userMessage: String, memory: String): ChatUiMessage {
-        val assistantText = repository.generateTechSpec(userMessage, memory)
+    suspend operator fun invoke(
+        userMessage: String,
+        memory: String,
+        modelId: String
+    ): ChatUiMessage {
+        val generationResult = repository.generateTechSpec(userMessage, memory, modelId)
 
         val pattern = Pattern.compile("\\{step:\\s*(\\w+)\\}")
-        val matcher = pattern.matcher(assistantText)
+        val matcher = pattern.matcher(generationResult.text)
 
         val step = if (matcher.find()) matcher.group(1) else null
         val cleanText = matcher.replaceAll("").trim()
@@ -20,7 +24,12 @@ class GenerateTechSpecUseCase @Inject constructor(
         return ChatUiMessage(
             text = cleanText,
             isUser = false,
-            techSpecStep = step
+            techSpecStep = step,
+            model = generationResult.model,
+            responseTime = generationResult.responseTime,
+            promptTokens = generationResult.promptTokens,
+            completionTokens = generationResult.completionTokens,
+            finishReason = generationResult.finishReason
         )
     }
 }

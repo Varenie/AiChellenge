@@ -1,17 +1,14 @@
 package ru.varenie.aichellenge.data.remote
 
+import com.google.gson.Gson
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
-import ru.varenie.aichellenge.data.repository.OpenAiRepositoryImpl
-import ru.varenie.aichellenge.domain.repository.OpenAiRepository
-import ru.varenie.aichellenge.domain.usecase.GenerateTechSpecUseCase
-import ru.varenie.aichellenge.domain.usecase.SendMessageUseCase
+import ru.varenie.aichellenge.data.repository.HuggingFaceRepositoryImpl
+import ru.varenie.aichellenge.domain.repository.HuggingFaceRepository
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
@@ -32,30 +29,15 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideRetrofit(client: OkHttpClient): Retrofit =
-        Retrofit.Builder()
-            .baseUrl("https://api.openai.com/v1/")
-            .client(client)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-
+    fun provideGson(): Gson = Gson()
 
     @Provides
     @Singleton
-    fun provideOpenAiApi(retrofit: Retrofit): OpenAiApi =
-        retrofit.create(OpenAiApi::class.java)
+    fun provideHuggingFaceClient(okHttpClient: OkHttpClient, gson: Gson): HuggingFaceClient =
+        HuggingFaceClient(okHttpClient, gson)
 
     @Provides
     @Singleton
-    fun provideRepository(api: OpenAiApi): OpenAiRepository = OpenAiRepositoryImpl(api)
-
-    @Provides
-    @Singleton
-    fun provideSendMessageUseCase(repository: OpenAiRepository): SendMessageUseCase =
-        SendMessageUseCase(repository)
-
-    @Provides
-    @Singleton
-    fun provideGenerateTechSpecUseCase(repository: OpenAiRepository): GenerateTechSpecUseCase =
-        GenerateTechSpecUseCase(repository)
+    fun provideRepository(client: HuggingFaceClient): HuggingFaceRepository =
+        HuggingFaceRepositoryImpl(client)
 }
