@@ -75,36 +75,57 @@ class ChatViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val assistantMessage = when (_state.value.mode) {
-                    ChatMode.DIET -> sendMessageUseCase(text)
-                    ChatMode.TECH_SPEC -> {
-                        val currentMemory = _state.value.memory
-                        generateTechSpecUseCase(text, currentMemory)
-                    }
-                    ChatMode.CUSTOM -> {
-                        val currentSystemPrompt = _state.value.systemPrompt
-                        val currentTemperature = _state.value.temperature
-                        sendCustomMessageUseCase(text, currentSystemPrompt, currentTemperature)
-                    }
-                }
-
-                val newMemory = if (_state.value.mode == ChatMode.TECH_SPEC) {
-                    _state.value.memory + "User: " + text + "\n" + "Assistant: " + assistantMessage.text + "\n"
-                } else {
-                    _state.value.memory
-                }
-
-                _state.update {
-                    it.copy(
-                        messages = it.messages + assistantMessage,
-                        isLoading = false,
-                        memory = newMemory
-                    )
+                when (_state.value.mode) {
+                    ChatMode.DIET -> sendMessageForDiet(text)
+                    ChatMode.TECH_SPEC -> sendMessageForTechSpec(text)
+                    ChatMode.CUSTOM -> sendMessageForCustom(text)
                 }
             } catch (e: Exception) {
                 _state.update { it.copy(isLoading = false) }
                 _effect.emit(ChatEffect.ShowError(e.message ?: "Unknown error"))
             }
+        }
+    }
+
+    private suspend fun sendMessageForDiet(text: String) {
+        val assistantMessage = sendMessageUseCase(text)
+        _state.update {
+            it.copy(
+                messages = it.messages + assistantMessage,
+                isLoading = false,
+            )
+        }
+    }
+
+    private suspend fun sendMessageForTechSpec(text: String) {
+        val currentMemory = _state.value.memory
+        val assistantMessage = generateTechSpecUseCase(text, currentMemory)
+        val newMemory =
+            _state.value.memory + "User: " + text + "\n" + "Assistant: " + assistantMessage.text + "\n"
+
+        _state.update {
+            it.copy(
+                messages = it.messages + assistantMessage,
+                isLoading = false,
+                memory = newMemory
+            )
+        }
+    }
+
+    private suspend fun sendMessageForCustom(text: String) {
+        val currentSystemPrompt = _state.value.systemPrompt
+        val currentTemperature = _state.value.temperature
+        val response = sendCustomMessageUseCase(text, currentSystemPrompt, currentTemperature)
+        val assistantMessage = ChatUiMessage(text = response, isUser = false)
+        val newMemory =
+            _state.value.memory + "User: " + text + "\n" + "Assistant: " + assistantMessage.text + "\n"
+
+        _state.update {
+            it.copy(
+                messages = it.messages + assistantMessage,
+                isLoading = false,
+                memory = newMemory
+            )
         }
     }
 
