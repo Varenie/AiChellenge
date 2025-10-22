@@ -1,5 +1,6 @@
 package ru.varenie.aichellenge.domain.repository
 
+import ru.varenie.aichellenge.domain.models.ChatSettings
 import ru.varenie.aichellenge.domain.models.GenerationResult
 
 interface HuggingFaceRepository {
@@ -7,8 +8,7 @@ interface HuggingFaceRepository {
     suspend fun generateTechSpec(message: String, memory: String, modelId: String): GenerationResult
     suspend fun sendCustomMessage(
         message: String,
-        systemPrompt: String,
-        temperature: Float,
+        chatSettings: ChatSettings,
         modelId: String
     ): GenerationResult
 

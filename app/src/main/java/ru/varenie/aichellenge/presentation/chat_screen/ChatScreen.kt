@@ -179,7 +179,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 ) {
                     Text("System Prompt:", style = MaterialTheme.typography.labelMedium)
                     TextField(
-                        value = state.systemPrompt,
+                        value = state.chatSettings.systemPrompt,
                         onValueChange = { viewModel.onEvent(ChatEvent.UpdateSystemPrompt(it)) },
                         modifier = Modifier.fillMaxWidth(),
                         placeholder = { Text("Enter system prompt") },
@@ -194,7 +194,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("Temperature:", style = MaterialTheme.typography.labelMedium)
                     TextField(
-                        value = state.temperature.toString(),
+                        value = state.chatSettings.temperature.toString(),
                         onValueChange = {
                             val newTemp = it.toFloatOrNull()
                             if (newTemp != null && newTemp >= 0f) {

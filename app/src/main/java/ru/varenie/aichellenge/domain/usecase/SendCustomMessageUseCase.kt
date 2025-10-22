@@ -1,5 +1,6 @@
 package ru.varenie.aichellenge.domain.usecase
 
+import ru.varenie.aichellenge.domain.models.ChatSettings
 import ru.varenie.aichellenge.domain.models.GenerationResult
 import ru.varenie.aichellenge.domain.repository.HuggingFaceRepository
 import javax.inject.Inject
@@ -9,10 +10,9 @@ class SendCustomMessageUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(
         userMessage: String,
-        systemPrompt: String,
-        temperature: Float,
+        chatSettings: ChatSettings,
         modelId: String
     ): GenerationResult {
-        return repository.sendCustomMessage(userMessage, systemPrompt, temperature, modelId)
+        return repository.sendCustomMessage(userMessage, chatSettings, modelId)
     }
 }

@@ -67,11 +67,11 @@ class ChatViewModel @Inject constructor(
     }
 
     private fun updateTemperature(temperature: Float) {
-        _state.update { it.copy(temperature = temperature) }
+        _state.update { it.copy(chatSettings = it.chatSettings.copy(temperature = temperature)) }
     }
 
     private fun updateSystemPrompt(systemPrompt: String) {
-        _state.update { it.copy(systemPrompt = systemPrompt) }
+        _state.update { it.copy(chatSettings = it.chatSettings.copy(systemPrompt = systemPrompt)) }
     }
 
     private fun exportChatToClipboard() {
@@ -134,12 +134,10 @@ class ChatViewModel @Inject constructor(
     }
 
     private suspend fun sendMessageForCustom(text: String) {
-        val currentSystemPrompt = _state.value.systemPrompt
-        val currentTemperature = _state.value.temperature
+        val chatSettings = _state.value.chatSettings
         val generationResult = sendCustomMessageUseCase(
             text,
-            currentSystemPrompt,
-            currentTemperature,
+            chatSettings,
             _state.value.selectedModel!!.id
         )
         val assistantMessage = ChatUiMessage(
@@ -185,8 +183,7 @@ data class ChatState(
     val error: String? = null,
     val mode: ChatMode = ChatMode.DIET,
     val memory: String = "",
-    val systemPrompt: String = "You are a helpful assistant.",
-    val temperature: Float = 0.7f,
+    val chatSettings: ru.varenie.aichellenge.domain.models.ChatSettings = ru.varenie.aichellenge.domain.models.ChatSettings(),
     val models: List<ru.varenie.aichellenge.domain.models.Model> = emptyList(),
     val selectedModel: ru.varenie.aichellenge.domain.models.Model? = null,
     val isModelSelectorVisible: Boolean = false

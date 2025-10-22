@@ -1,6 +1,7 @@
 package ru.varenie.aichellenge.data.repository
 
 import ru.varenie.aichellenge.data.remote.HuggingFaceClient
+import ru.varenie.aichellenge.domain.models.ChatSettings
 import ru.varenie.aichellenge.domain.models.GenerationResult
 import ru.varenie.aichellenge.domain.repository.HuggingFaceRepository
 import javax.inject.Inject
@@ -31,11 +32,10 @@ $memory
 
     override suspend fun sendCustomMessage(
         message: String,
-        systemPrompt: String,
-        temperature: Float,
+        chatSettings: ChatSettings,
         modelId: String
     ): GenerationResult {
-        val fullMessage = "$systemPrompt\n\n$message"
+        val fullMessage = "${chatSettings.systemPrompt}\n\n$message"
         return client.generateText(modelId, fullMessage)
     }
 
@@ -43,4 +43,3 @@ $memory
         return client.generateText(modelName, prompt)
     }
 }
-
