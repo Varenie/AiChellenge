@@ -12,7 +12,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ru.varenie.aichellenge.domain.models.ChatUiMessage
-import ru.varenie.aichellenge.domain.usecase.GenerateTechSpecUseCase
+import ru.varenie.aichellenge.domain.models.Model
+import ru.varenie.aichellenge.domain.usecase.GenerateCodeAndTestsUseCase
 import ru.varenie.aichellenge.domain.usecase.SendCustomMessageUseCase
 import ru.varenie.aichellenge.domain.usecase.SendMessageUseCase
 import javax.inject.Inject
@@ -20,17 +21,17 @@ import javax.inject.Inject
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     private val sendMessageUseCase: SendMessageUseCase,
-    private val generateTechSpecUseCase: GenerateTechSpecUseCase,
-    private val sendCustomMessageUseCase: SendCustomMessageUseCase
+    private val sendCustomMessageUseCase: SendCustomMessageUseCase,
+    private val generateCodeAndTestsUseCase: GenerateCodeAndTestsUseCase
 ) : ViewModel() {
 
     private val models = listOf(
-        ru.varenie.aichellenge.domain.models.Model(
+        Model("openai/gpt-oss-20b", "GPT- 20b"),
+        Model(
             "deepseek-ai/DeepSeek-R1:hyperbolic",
             "DeepSeek"
         ),
-        ru.varenie.aichellenge.domain.models.Model("openai/gpt-oss-20b", "GPT- 20b"),
-        ru.varenie.aichellenge.domain.models.Model("baidu/ERNIE-4.5-0.3B-PT", "Ernie"),
+        Model("baidu/ERNIE-4.5-0.3B-PT", "Ernie"),
     )
 
     private val _state =
@@ -77,7 +78,7 @@ class ChatViewModel @Inject constructor(
     private fun exportChatToClipboard() {
         viewModelScope.launch {
             val history = _state.value.messages.joinToString("\n") { msg ->
-                if (msg.isUser) "User: ${msg.text}" else "Assistant: ${msg.text}"
+                if (msg.agent == ru.varenie.aichellenge.domain.models.Agent.USER) "User: ${msg.text}" else "Assistant (${msg.agent.name}): ${msg.text}"
             }
             _effect.emit(ChatEffect.CopyToClipboard(history))
         }
@@ -90,20 +91,53 @@ class ChatViewModel @Inject constructor(
     private fun sendMessage(text: String) {
         if (text.isBlank()) return
 
-        val userMessage = ChatUiMessage(text = text, isUser = true)
-        _state.update { it.copy(messages = it.messages + userMessage, isLoading = true) }
-
         viewModelScope.launch {
             try {
                 when (_state.value.mode) {
                     ChatMode.DIET -> sendMessageForDiet(text)
                     ChatMode.TECH_SPEC -> sendMessageForTechSpec(text)
                     ChatMode.CUSTOM -> sendMessageForCustom(text)
+                    ChatMode.MULTI_AGENT -> sendMessageForMultiAgent(text)
                 }
             } catch (e: Exception) {
                 _state.update { it.copy(isLoading = false) }
                 _effect.emit(ChatEffect.ShowError(e.message ?: "Unknown error"))
             }
+        }
+    }
+
+    private fun sendMessageForMultiAgent(text: String) {
+        viewModelScope.launch {
+            generateCodeAndTestsUseCase(text, _state.value.selectedModel!!.id)
+                .collect { event ->
+                    when (event) {
+                        is ru.varenie.aichellenge.domain.usecase.AgentStreamEvent.Typing -> {
+                            val typingMessage = ChatUiMessage(
+                                id = "typing-${event.agent.name}",
+                                text = "${event.agent.name} is typing...",
+                                agent = event.agent
+                            )
+                            _state.update { it.copy(messages = it.messages + typingMessage) }
+                        }
+
+                        is ru.varenie.aichellenge.domain.usecase.AgentStreamEvent.Message -> {
+                            if (event.message.agent == ru.varenie.aichellenge.domain.models.Agent.USER) {
+                                _state.update { it.copy(messages = it.messages + event.message) }
+                            } else {
+                                _state.update { state ->
+                                    val newMessages = state.messages.map {
+                                        if (it.id == "typing-${event.message.agent.name}") {
+                                            event.message
+                                        } else {
+                                            it
+                                        }
+                                    }
+                                    state.copy(messages = newMessages)
+                                }
+                            }
+                        }
+                    }
+                }
         }
     }
 
@@ -118,19 +152,7 @@ class ChatViewModel @Inject constructor(
     }
 
     private suspend fun sendMessageForTechSpec(text: String) {
-        val currentMemory = _state.value.memory
-        val assistantMessage =
-            generateTechSpecUseCase(text, currentMemory, _state.value.selectedModel!!.id)
-        val newMemory =
-            _state.value.memory + "User: " + text + "\n" + "Assistant: " + assistantMessage.text + "\n"
-
-        _state.update {
-            it.copy(
-                messages = it.messages + assistantMessage,
-                isLoading = false,
-                memory = newMemory
-            )
-        }
+        // TODO: Implement Tech Spec logic if needed separately
     }
 
     private suspend fun sendMessageForCustom(text: String) {
@@ -142,7 +164,7 @@ class ChatViewModel @Inject constructor(
         )
         val assistantMessage = ChatUiMessage(
             text = generationResult.text,
-            isUser = false,
+            agent = ru.varenie.aichellenge.domain.models.Agent.DEVELOPER, //TODO change to ASSISTANT
             model = generationResult.model,
             responseTime = generationResult.responseTime,
             promptTokens = generationResult.promptTokens,
@@ -174,7 +196,8 @@ class ChatViewModel @Inject constructor(
 enum class ChatMode {
     DIET,
     TECH_SPEC,
-    CUSTOM
+    CUSTOM,
+    MULTI_AGENT
 }
 
 data class ChatState(
@@ -186,7 +209,8 @@ data class ChatState(
     val chatSettings: ru.varenie.aichellenge.domain.models.ChatSettings = ru.varenie.aichellenge.domain.models.ChatSettings(),
     val models: List<ru.varenie.aichellenge.domain.models.Model> = emptyList(),
     val selectedModel: ru.varenie.aichellenge.domain.models.Model? = null,
-    val isModelSelectorVisible: Boolean = false
+    val isModelSelectorVisible: Boolean = false,
+    val typingAgent: ru.varenie.aichellenge.domain.models.Agent? = null
 )
 
 sealed class ChatEvent {

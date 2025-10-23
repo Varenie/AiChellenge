@@ -40,4 +40,6 @@ object NetworkModule {
     @Singleton
     fun provideRepository(client: HuggingFaceClient): HuggingFaceRepository =
         HuggingFaceRepositoryImpl(client)
+
+
 }
