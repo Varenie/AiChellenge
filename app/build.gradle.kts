@@ -90,4 +90,5 @@ dependencies {
     kapt("com.google.dagger:hilt-compiler:2.51.1")
     implementation(libs.androidx.hilt.navigation.compose)
 
+    implementation("com.knuddels:jtokkit:1.0.0")
 }

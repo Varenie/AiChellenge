@@ -28,7 +28,7 @@ class GenerateCodeAndTestsUseCase(private val repository: HuggingFaceRepository)
             responseTime = developerResult.responseTime,
             model = developerResult.model,
             promptTokens = developerResult.promptTokens,
-            completionTokens = developerResult.completionTokens,
+            outputTokens = developerResult.completionTokens,
             finishReason = developerResult.finishReason
         )
         emit(AgentStreamEvent.Message(developerMessage))
@@ -45,7 +45,7 @@ class GenerateCodeAndTestsUseCase(private val repository: HuggingFaceRepository)
                 responseTime = testerResult.responseTime,
                 model = testerResult.model,
                 promptTokens = testerResult.promptTokens,
-                completionTokens = testerResult.completionTokens,
+                outputTokens = testerResult.completionTokens,
                 finishReason = testerResult.finishReason
             )
             emit(AgentStreamEvent.Message(testerMessage))

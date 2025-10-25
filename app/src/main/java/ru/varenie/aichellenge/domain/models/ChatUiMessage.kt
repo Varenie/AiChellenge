@@ -12,6 +12,10 @@ data class ChatUiMessage(
     val model: String? = null,
     val responseTime: Long = 0,
     val promptTokens: Int? = null,
-    val completionTokens: Int? = null,
-    val finishReason: String? = null
+    val outputTokens: Int? = null,
+    val finishReason: String? = null,
+    val inputTokens: Int? = null, // Tokens after potential summarization
+    val originalInputTokens: Int? = null, // Tokens before summarization
+    val isSummarized: Boolean = false,
+    val originalText: String? = null
 )

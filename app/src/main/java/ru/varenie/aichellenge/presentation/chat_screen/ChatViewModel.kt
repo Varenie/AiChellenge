@@ -11,8 +11,12 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import ru.varenie.aichellenge.data.TokenCounter
+import ru.varenie.aichellenge.domain.models.Agent
 import ru.varenie.aichellenge.domain.models.ChatUiMessage
+import ru.varenie.aichellenge.domain.models.MessageProcessingResult
 import ru.varenie.aichellenge.domain.models.Model
+import ru.varenie.aichellenge.domain.usecase.AgentStreamEvent
 import ru.varenie.aichellenge.domain.usecase.GenerateCodeAndTestsUseCase
 import ru.varenie.aichellenge.domain.usecase.SendCustomMessageUseCase
 import ru.varenie.aichellenge.domain.usecase.SendMessageUseCase
@@ -22,7 +26,8 @@ import javax.inject.Inject
 class ChatViewModel @Inject constructor(
     private val sendMessageUseCase: SendMessageUseCase,
     private val sendCustomMessageUseCase: SendCustomMessageUseCase,
-    private val generateCodeAndTestsUseCase: GenerateCodeAndTestsUseCase
+    private val generateCodeAndTestsUseCase: GenerateCodeAndTestsUseCase,
+    private val tokenCounter: TokenCounter
 ) : ViewModel() {
 
     private val models = listOf(
@@ -42,7 +47,7 @@ class ChatViewModel @Inject constructor(
     val effect: SharedFlow<ChatEffect> = _effect.asSharedFlow()
 
     fun onEvent(event: ChatEvent) {
-        when(event) {
+        when (event) {
             is ChatEvent.SendMessage -> sendMessage(event.text)
             is ChatEvent.ToggleRaw -> toggleRaw(event.message)
             is ChatEvent.SwitchMode -> switchMode(event.mode)
@@ -59,7 +64,7 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private fun selectModel(model: ru.varenie.aichellenge.domain.models.Model) {
+    private fun selectModel(model: Model) {
         _state.update { it.copy(selectedModel = model, isModelSelectorVisible = false) }
     }
 
@@ -77,8 +82,8 @@ class ChatViewModel @Inject constructor(
 
     private fun exportChatToClipboard() {
         viewModelScope.launch {
-            val history = _state.value.messages.joinToString("\n") { msg ->
-                if (msg.agent == ru.varenie.aichellenge.domain.models.Agent.USER) "User: ${msg.text}" else "Assistant (${msg.agent.name}): ${msg.text}"
+            val history = _state.value.messages.joinToString("") { msg ->
+                if (msg.agent == Agent.USER) "User: ${msg.text}" else "Assistant (${msg.agent.name}): ${msg.text}"
             }
             _effect.emit(ChatEffect.CopyToClipboard(history))
         }
@@ -91,12 +96,20 @@ class ChatViewModel @Inject constructor(
     private fun sendMessage(text: String) {
         if (text.isBlank()) return
 
+        val userMessageTokens = tokenCounter.countTokens(text)
+        val userMessage = ChatUiMessage(
+            text = text,
+            agent = Agent.USER,
+            inputTokens = userMessageTokens
+        )
+        _state.update { it.copy(messages = it.messages + userMessage, isLoading = true) }
+
         viewModelScope.launch {
             try {
                 when (_state.value.mode) {
-                    ChatMode.DIET -> sendMessageForDiet(text)
-                    ChatMode.TECH_SPEC -> sendMessageForTechSpec(text)
-                    ChatMode.CUSTOM -> sendMessageForCustom(text)
+                    ChatMode.DIET -> handleDietMode(text, userMessage)
+                    ChatMode.TECH_SPEC -> handleTechSpecMode(text, userMessage)
+                    ChatMode.CUSTOM -> handleCustomMode(text, userMessage)
                     ChatMode.MULTI_AGENT -> sendMessageForMultiAgent(text)
                 }
             } catch (e: Exception) {
@@ -106,34 +119,86 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    private suspend fun handleDietMode(text: String, userMessage: ChatUiMessage) {
+        val result = sendMessageUseCase(text, _state.value.selectedModel!!.id)
+        updateStateWithResult(userMessage, result)
+    }
+
+    private suspend fun handleTechSpecMode(text: String, userMessage: ChatUiMessage) {
+        val result = sendMessageUseCase(text, _state.value.selectedModel!!.id)
+        updateStateWithResult(userMessage, result)
+    }
+
+    private suspend fun handleCustomMode(text: String, userMessage: ChatUiMessage) {
+        val chatSettings = _state.value.chatSettings
+        val result = sendCustomMessageUseCase(
+            text,
+            chatSettings,
+            _state.value.selectedModel!!.id
+        )
+        updateStateWithResult(userMessage, result)
+    }
+
+    private fun updateStateWithResult(
+        userMessage: ChatUiMessage,
+        result: MessageProcessingResult
+    ) {
+        val updatedUserMessage = userMessage.copy(
+            originalInputTokens = result.originalInputTokens,
+            isSummarized = result.isSummarized,
+            inputTokens = result.summarizedTokens ?: userMessage.inputTokens,
+            originalText = result.originalText
+        )
+
+        val assistantMessage = ChatUiMessage(
+            text = result.generationResult.text,
+            agent = Agent.ASSISTANT,
+            model = result.generationResult.model,
+            responseTime = result.generationResult.responseTime,
+            outputTokens = result.generationResult.completionTokens
+        )
+
+        _state.update {
+            val updatedMessages = it.messages.map { msg ->
+                if (msg.id == userMessage.id) updatedUserMessage else msg
+            }
+            it.copy(
+                messages = updatedMessages + assistantMessage,
+                isLoading = false
+            )
+        }
+    }
+
     private fun sendMessageForMultiAgent(text: String) {
         viewModelScope.launch {
             generateCodeAndTestsUseCase(text, _state.value.selectedModel!!.id)
                 .collect { event ->
                     when (event) {
-                        is ru.varenie.aichellenge.domain.usecase.AgentStreamEvent.Typing -> {
+                        is AgentStreamEvent.Typing -> {
                             val typingMessage = ChatUiMessage(
                                 id = "typing-${event.agent.name}",
                                 text = "${event.agent.name} is typing...",
                                 agent = event.agent
                             )
-                            _state.update { it.copy(messages = it.messages + typingMessage) }
+                            _state.update {
+                                if (it.messages.none { msg -> msg.id == typingMessage.id }) {
+                                    it.copy(messages = it.messages + typingMessage)
+                                } else {
+                                    it
+                                }
+                            }
                         }
 
-                        is ru.varenie.aichellenge.domain.usecase.AgentStreamEvent.Message -> {
-                            if (event.message.agent == ru.varenie.aichellenge.domain.models.Agent.USER) {
-                                _state.update { it.copy(messages = it.messages + event.message) }
-                            } else {
-                                _state.update { state ->
-                                    val newMessages = state.messages.map {
-                                        if (it.id == "typing-${event.message.agent.name}") {
-                                            event.message
-                                        } else {
-                                            it
-                                        }
+                        is AgentStreamEvent.Message -> {
+                            _state.update { state ->
+                                val newMessages = state.messages.map {
+                                    if (it.id == "typing-${event.message.agent.name}") {
+                                        event.message
+                                    } else {
+                                        it
                                     }
-                                    state.copy(messages = newMessages)
                                 }
+                                state.copy(messages = newMessages)
                             }
                         }
                     }
@@ -141,52 +206,19 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private suspend fun sendMessageForDiet(text: String) {
-        val assistantMessage = sendMessageUseCase(text, _state.value.selectedModel!!.id)
-        _state.update {
-            it.copy(
-                messages = it.messages + assistantMessage,
-                isLoading = false,
-            )
-        }
-    }
-
-    private suspend fun sendMessageForTechSpec(text: String) {
-        // TODO: Implement Tech Spec logic if needed separately
-    }
-
-    private suspend fun sendMessageForCustom(text: String) {
-        val chatSettings = _state.value.chatSettings
-        val generationResult = sendCustomMessageUseCase(
-            text,
-            chatSettings,
-            _state.value.selectedModel!!.id
-        )
-        val assistantMessage = ChatUiMessage(
-            text = generationResult.text,
-            agent = ru.varenie.aichellenge.domain.models.Agent.DEVELOPER, //TODO change to ASSISTANT
-            model = generationResult.model,
-            responseTime = generationResult.responseTime,
-            promptTokens = generationResult.promptTokens,
-            completionTokens = generationResult.completionTokens,
-            finishReason = generationResult.finishReason
-        )
-        val newMemory =
-            _state.value.memory + "User: " + text + "\n" + "Assistant: " + assistantMessage.text + "\n"
-
-        _state.update {
-            it.copy(
-                messages = it.messages + assistantMessage,
-                isLoading = false,
-                memory = newMemory
-            )
-        }
-    }
-
     fun toggleRaw(message: ChatUiMessage) {
         _state.update {
             val newMessages = it.messages.map { m ->
-                if (m == message) m.copy(showRaw = !m.showRaw) else m
+                if (m == message) {
+                    m.copy(
+                        showRaw = !m.showRaw,
+                        text = if (m.showRaw) m.originalText
+                            ?: m.text else m.text // Toggle between original and summarized text
+                    )
+                } else {
+                    m
+                }
+
             }
             it.copy(messages = newMessages)
         }

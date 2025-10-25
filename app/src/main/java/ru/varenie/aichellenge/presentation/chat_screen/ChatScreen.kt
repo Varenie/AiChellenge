@@ -56,6 +56,8 @@ import kotlinx.coroutines.launch
 import ru.varenie.aichellenge.domain.models.ChatUiMessage
 import ru.varenie.aichellenge.presentation.util.copyToClipboard
 import ru.varenie.aichellenge.presentation.util.saveAndShareText
+import ru.varenie.aichellenge.utils.MAX_REQUEST_TOKENS
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -236,6 +238,12 @@ fun ChatScreen(viewModel: ChatViewModel) {
             }
 
             var text by remember { mutableStateOf("") }
+            Text(
+                text = "Max input tokens: $MAX_REQUEST_TOKENS",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -320,6 +328,7 @@ fun ChatBubble(message: ChatUiMessage, onEvent: (ChatEvent) -> Unit) {
             modifier = Modifier
                 .background(color, shape = RoundedCornerShape(12.dp))
                 .padding(12.dp)
+                .clickable { onEvent(ChatEvent.ToggleRaw(message)) }
         ) {
             if (!isUser && message.mealResponse != null) {
                 Column {
@@ -328,7 +337,35 @@ fun ChatBubble(message: ChatUiMessage, onEvent: (ChatEvent) -> Unit) {
             } else {
                 // Сообщение пользователя или ассистента
                 Column {
-                    Text(text = message.text, color = textColor)
+                    Text(
+                        text = if (message.isSummarized && message.showRaw) message.originalText
+                            ?: message.text else message.text,
+                        color = textColor
+                    )
+                    if (isUser && (message.inputTokens ?: 0) > 0) {
+                        Column(modifier = Modifier.padding(top = 4.dp)) {
+                            Text(
+                                text = "Tokens: ${message.inputTokens ?: 0}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = textColor.copy(alpha = 0.6f)
+                            )
+                            if (message.isSummarized) {
+                                Text(
+                                    text = "Summarized (Original: ${message.originalInputTokens ?: 0})",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = textColor.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                    }
+                    if (!isUser && (message.outputTokens ?: 0) > 0) {
+                        Text(
+                            text = "Tokens: ${message.outputTokens ?: 0}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = textColor.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
                     if (!isUser && message.techSpecStep == "generate_tz") {
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(onClick = { onEvent(ChatEvent.RequestSaveTechSpec(message.text)) }) {
