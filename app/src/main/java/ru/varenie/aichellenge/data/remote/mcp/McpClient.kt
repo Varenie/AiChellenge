@@ -11,6 +11,7 @@ interface McpClient {
     suspend fun connect(url: String)
     suspend fun disconnect()
     suspend fun sendMessage(request: McpRequest)
+    suspend fun getTools() // Added function
 
     sealed class ConnectionState {
         object Connected : ConnectionState()

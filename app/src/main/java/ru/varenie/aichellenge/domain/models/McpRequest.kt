@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class McpRequest(
     val id: String,
-    val message: String,
+    val message: String? = null,
+    val type: String? = null,
     val timestamp: Long
 )

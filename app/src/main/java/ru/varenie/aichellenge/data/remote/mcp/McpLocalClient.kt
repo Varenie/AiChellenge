@@ -1,6 +1,6 @@
 package ru.varenie.aichellenge.data.remote.mcp
 
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import ru.varenie.aichellenge.domain.models.McpRequest
 import ru.varenie.aichellenge.domain.models.McpResponse
-import kotlinx.coroutines.delay
 
 class McpLocalClient : McpClient {
 
@@ -37,5 +36,16 @@ class McpLocalClient : McpClient {
             response = "Local client received: ${request.message}",
             timestamp = System.currentTimeMillis()
         ))
+    }
+
+    override suspend fun getTools() {
+        // No-op for local client, or simulate a response if needed for testing
+        _incomingMessages.emit(
+            McpResponse(
+                id = java.util.UUID.randomUUID().toString(),
+                response = "{\"type\": \"tools_list\", \"tools\": []}", // Simulate empty tools list
+                timestamp = System.currentTimeMillis()
+            )
+        )
     }
 }

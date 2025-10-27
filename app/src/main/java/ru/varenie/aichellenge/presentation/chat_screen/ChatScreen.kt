@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.width // Added import
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -235,6 +235,21 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 ) {
                     var mcpUrl by remember { mutableStateOf("ws://10.0.2.2:8080/mcp") } // Default URL
 
+                    TextField(
+                        value = mcpUrl,
+                        onValueChange = { mcpUrl = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Enter MCP Server URL") },
+                        shape = RoundedCornerShape(16.dp),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
                     Text(
                         text = "MCP Connection: ${state.mcpConnectionState}",
                         style = MaterialTheme.typography.labelMedium,
@@ -245,20 +260,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         horizontalArrangement = Arrangement.SpaceAround,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TextField(
-                            value = mcpUrl,
-                            onValueChange = { mcpUrl = it },
-                            modifier = Modifier.weight(1f),
-                            placeholder = { Text("Enter MCP Server URL") },
-                            shape = RoundedCornerShape(16.dp),
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent,
-                                disabledIndicatorColor = Color.Transparent
-                            )
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
                         Button(
                             onClick = { viewModel.onEvent(ChatEvent.ConnectMcp(mcpUrl)) },
                             enabled = state.mcpConnectionState is ru.varenie.aichellenge.data.remote.mcp.McpClient.ConnectionState.Disconnected
@@ -272,10 +273,32 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         ) {
                             Text("Disconnect")
                         }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = { viewModel.onEvent(ChatEvent.RequestMcpTools) },
+                            enabled = state.mcpConnectionState is ru.varenie.aichellenge.data.remote.mcp.McpClient.ConnectionState.Connected
+                        ) {
+                            Text("Request Tools")
+                        }
                     }
                     Spacer(modifier = Modifier.height(8.dp))
+
+                    // Display available tools
+                    if (state.availableTools.isNotEmpty()) {
+                        Text("Available Tools:", style = MaterialTheme.typography.titleMedium)
+                        Column {
+                            state.availableTools.forEach { tool ->
+                                Text(
+                                    "- ${tool.name}: ${tool.description}",
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                 }
             }
+
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
@@ -440,5 +463,6 @@ fun ChatBubble(message: ChatUiMessage, onEvent: (ChatEvent) -> Unit) {
         if (!isUser) {
             // ... (rest of the metadata code is the same)
         }
-    }
+        }
+
 }

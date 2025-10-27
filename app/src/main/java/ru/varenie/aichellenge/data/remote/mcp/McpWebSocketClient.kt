@@ -1,27 +1,25 @@
 package ru.varenie.aichellenge.data.remote.mcp
 
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
-import ru.varenie.aichellenge.domain.models.McpRequest
-import ru.varenie.aichellenge.domain.models.McpResponse
-import okhttp3.OkHttpClient // Added import
-import kotlinx.serialization.json.Json // Added import
-import okhttp3.WebSocket
-import okhttp3.Request
-import okhttp3.Response
-import okhttp3.WebSocketListener
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.trySendBlocking
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
+import ru.varenie.aichellenge.domain.models.McpRequest
+import ru.varenie.aichellenge.domain.models.McpResponse
+import ru.varenie.aichellenge.domain.models.ToolsListResponse
 
 class McpWebSocketClient(
     private val okHttpClient: OkHttpClient,
@@ -47,10 +45,31 @@ class McpWebSocketClient(
             override fun onMessage(webSocket: WebSocket, text: String) {
                 scope.launch {
                     try {
-                        val mcpResponse = json.decodeFromString<McpResponse>(text)
-                        _incomingMessages.emit(mcpResponse)
+                        // Try to parse as ToolsListResponse first
+                        val toolsListResponse = json.decodeFromString<ToolsListResponse>(text)
+                        if (toolsListResponse.type == "tools_list_response") {
+                            _incomingMessages.emit(
+                                McpResponse(
+                                    id = java.util.UUID.randomUUID().toString(),
+                                    response = text, // Store the original JSON for later parsing in ViewModel
+                                    timestamp = System.currentTimeMillis()
+                                )
+                            )
+                        } else {
+                            // If it has a 'type' but not 'tools_list_response', treat as generic McpResponse
+                            val mcpResponse = json.decodeFromString<McpResponse>(text)
+                            _incomingMessages.emit(mcpResponse)
+                        }
                     } catch (e: Exception) {
-                        println("Error parsing WebSocket message: ${e.message}")
+                        // If parsing as ToolsListResponse or McpResponse fails, treat as plain text
+                        _incomingMessages.emit(
+                            McpResponse(
+                                id = java.util.UUID.randomUUID().toString(),
+                                response = text,
+                                timestamp = System.currentTimeMillis()
+                            )
+                        )
+                        println("Error parsing WebSocket message, treating as plain text: ${e.message}")
                     }
                 }
             }
@@ -72,6 +91,15 @@ class McpWebSocketClient(
     }
 
     override suspend fun sendMessage(request: McpRequest) {
+        webSocket?.send(json.encodeToString(request))
+    }
+
+    override suspend fun getTools() {
+        val request = McpRequest(
+            id = java.util.UUID.randomUUID().toString(),
+            type = "get_tools",
+            timestamp = System.currentTimeMillis()
+        )
         webSocket?.send(json.encodeToString(request))
     }
 }

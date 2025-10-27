@@ -11,17 +11,20 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import ru.varenie.aichellenge.data.TokenCounter
+import ru.varenie.aichellenge.data.remote.mcp.McpClient
 import ru.varenie.aichellenge.domain.models.Agent
 import ru.varenie.aichellenge.domain.models.ChatUiMessage
+import ru.varenie.aichellenge.domain.models.McpRequest
 import ru.varenie.aichellenge.domain.models.MessageProcessingResult
 import ru.varenie.aichellenge.domain.models.Model
+import ru.varenie.aichellenge.domain.models.Tool
+import ru.varenie.aichellenge.domain.models.ToolsListResponse
 import ru.varenie.aichellenge.domain.usecase.AgentStreamEvent
 import ru.varenie.aichellenge.domain.usecase.GenerateCodeAndTestsUseCase
 import ru.varenie.aichellenge.domain.usecase.SendCustomMessageUseCase
 import ru.varenie.aichellenge.domain.usecase.SendMessageUseCase
-import ru.varenie.aichellenge.data.remote.mcp.McpClient // Added import
-import ru.varenie.aichellenge.domain.models.McpRequest // Added import
 import javax.inject.Inject
 
 @HiltViewModel
@@ -30,7 +33,8 @@ class ChatViewModel @Inject constructor(
     private val sendCustomMessageUseCase: SendCustomMessageUseCase,
     private val generateCodeAndTestsUseCase: GenerateCodeAndTestsUseCase,
     private val tokenCounter: TokenCounter,
-    private val mcpClient: McpClient // Injected McpClient
+    private val mcpClient: McpClient, // Injected McpClient
+    private val json: Json // Injected Json
 ) : ViewModel() {
 
 
@@ -68,6 +72,13 @@ class ChatViewModel @Inject constructor(
             is ChatEvent.ConnectMcp -> connectToMcp(event.url)
             is ChatEvent.DisconnectMcp -> disconnectFromMcp()
             is ChatEvent.SendMcpMessage -> sendMcpMessage(event.text)
+            is ChatEvent.RequestMcpTools -> requestMcpTools()
+        }
+    }
+
+    private fun requestMcpTools() {
+        viewModelScope.launch {
+            mcpClient.getTools()
         }
     }
 
@@ -270,16 +281,65 @@ class ChatViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             mcpClient.incomingMessages.collect { mcpResponse ->
-                _state.update {
-                    it.copy(
-                        messages = it.messages + ChatUiMessage(
-                            text = mcpResponse.response,
-                            agent = Agent.ASSISTANT,
-                            model = "MCP Server", // Or a specific MCP model if available
-                            responseTime = 0,
-                            outputTokens = 0
-                        )
-                    )
+                try {
+                    val toolsListResponse =
+                        json.decodeFromString<ToolsListResponse>(mcpResponse.response)
+                    if (toolsListResponse.type == "tools_list_response") {
+                        _state.update { it.copy(availableTools = toolsListResponse.tools) }
+                        _state.update {
+                            it.copy(
+                                messages = it.messages + ChatUiMessage(
+                                    text = "Received ${toolsListResponse.tools.size} tools: ${toolsListResponse.tools.joinToString { it.name }}",
+                                    agent = Agent.ASSISTANT,
+                                    model = "MCP Server",
+                                    responseTime = 0,
+                                    outputTokens = 0
+                                )
+                            )
+                        }
+                    } else {
+                        // If it's not a tools_list_response, treat it as a regular McpResponse
+                        _state.update {
+                            it.copy(
+                                messages = it.messages + ChatUiMessage(
+                                    text = mcpResponse.response,
+                                    agent = Agent.ASSISTANT,
+                                    model = "MCP Server",
+                                    responseTime = 0,
+                                    outputTokens = 0
+                                )
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    // If parsing as ToolsListResponse fails, try parsing the whole message as McpResponse
+                    try {
+                        _state.update {
+                            it.copy(
+                                messages = it.messages + ChatUiMessage(
+                                    text = mcpResponse.response,
+                                    agent = Agent.ASSISTANT,
+                                    model = "MCP Server",
+                                    responseTime = 0,
+                                    outputTokens = 0
+                                )
+                            )
+                        }
+                    } catch (e2: Exception) {
+                        // If parsing as McpResponse also fails, log the error and add raw text
+                        println("Error parsing WebSocket message: ${e2.message}")
+                        _state.update {
+                            it.copy(
+                                messages = it.messages + ChatUiMessage(
+                                    text = "Error parsing message: ${mcpResponse.response}",
+                                    agent = Agent.ASSISTANT,
+                                    model = "MCP Server",
+                                    responseTime = 0,
+                                    outputTokens = 0
+                                )
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -313,7 +373,8 @@ data class ChatState(
     val selectedModel: ru.varenie.aichellenge.domain.models.Model? = null,
     val isModelSelectorVisible: Boolean = false,
     val typingAgent: ru.varenie.aichellenge.domain.models.Agent? = null,
-    val mcpConnectionState: McpClient.ConnectionState = McpClient.ConnectionState.Disconnected
+    val mcpConnectionState: McpClient.ConnectionState = McpClient.ConnectionState.Disconnected,
+    val availableTools: List<Tool> = emptyList()
 )
 
 sealed class ChatEvent {
@@ -329,6 +390,7 @@ sealed class ChatEvent {
     data class ConnectMcp(val url: String) : ChatEvent()
     object DisconnectMcp : ChatEvent()
     data class SendMcpMessage(val text: String) : ChatEvent()
+    object RequestMcpTools : ChatEvent()
 }
 
 
