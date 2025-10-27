@@ -233,7 +233,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         .padding(8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    var mcpUrl by remember { mutableStateOf("ws://localhost:8080/mcp") } // Default URL
+                    var mcpUrl by remember { mutableStateOf("ws://10.0.2.2:8080/mcp") } // Default URL
 
                     Text(
                         text = "MCP Connection: ${state.mcpConnectionState}",
