@@ -7,10 +7,13 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import ru.varenie.aichellenge.data.remote.mcp.McpClient
+import ru.varenie.aichellenge.data.remote.mcp.McpWebSocketClient
 import ru.varenie.aichellenge.data.repository.HuggingFaceRepositoryImpl
 import ru.varenie.aichellenge.domain.repository.HuggingFaceRepository
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
+import kotlinx.serialization.json.Json
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -33,6 +36,13 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    fun provideJson(): Json = Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+    }
+
+    @Provides
+    @Singleton
     fun provideHuggingFaceClient(okHttpClient: OkHttpClient, gson: Gson): HuggingFaceClient =
         HuggingFaceClient(okHttpClient, gson)
 
@@ -41,5 +51,8 @@ object NetworkModule {
     fun provideRepository(client: HuggingFaceClient): HuggingFaceRepository =
         HuggingFaceRepositoryImpl(client)
 
-
+    @Provides
+    @Singleton
+    fun provideMcpClient(okHttpClient: OkHttpClient, json: Json): McpClient =
+        McpWebSocketClient(okHttpClient, json)
 }

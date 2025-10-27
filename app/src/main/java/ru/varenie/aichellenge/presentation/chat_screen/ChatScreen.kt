@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.width // Added import
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -105,6 +106,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
                                 ChatMode.TECH_SPEC -> "Tech Spec Assistant"
                                 ChatMode.CUSTOM -> "Custom Chat"
                                 ChatMode.MULTI_AGENT -> "Multi-Agent Chat"
+                                ChatMode.MCP_CHAT -> "MCP Chat"
                             }
                         )
                     },
@@ -151,6 +153,11 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         selected = state.mode == ChatMode.MULTI_AGENT,
                         onClick = { viewModel.onEvent(ChatEvent.SwitchMode(ChatMode.MULTI_AGENT)) },
                         text = { Text("Multi-Agent") }
+                    )
+                    Tab(
+                        selected = state.mode == ChatMode.MCP_CHAT,
+                        onClick = { viewModel.onEvent(ChatEvent.SwitchMode(ChatMode.MCP_CHAT)) },
+                        text = { Text("MCP Chat") }
                     )
                 }
             }
@@ -218,6 +225,57 @@ fun ChatScreen(viewModel: ChatViewModel) {
                     )
                 }
             }
+
+            AnimatedVisibility(visible = state.mode == ChatMode.MCP_CHAT) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    var mcpUrl by remember { mutableStateOf("ws://localhost:8080/mcp") } // Default URL
+
+                    Text(
+                        text = "MCP Connection: ${state.mcpConnectionState}",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextField(
+                            value = mcpUrl,
+                            onValueChange = { mcpUrl = it },
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text("Enter MCP Server URL") },
+                            shape = RoundedCornerShape(16.dp),
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                disabledIndicatorColor = Color.Transparent
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = { viewModel.onEvent(ChatEvent.ConnectMcp(mcpUrl)) },
+                            enabled = state.mcpConnectionState is ru.varenie.aichellenge.data.remote.mcp.McpClient.ConnectionState.Disconnected
+                        ) {
+                            Text("Connect")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = { viewModel.onEvent(ChatEvent.DisconnectMcp) },
+                            enabled = state.mcpConnectionState is ru.varenie.aichellenge.data.remote.mcp.McpClient.ConnectionState.Connected
+                        ) {
+                            Text("Disconnect")
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
@@ -268,7 +326,11 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 Button(
                     onClick = {
                         if (text.isNotBlank()) {
-                            viewModel.onEvent(ChatEvent.SendMessage(text))
+                            if (state.mode == ChatMode.MCP_CHAT) {
+                                viewModel.onEvent(ChatEvent.SendMcpMessage(text))
+                            } else {
+                                viewModel.onEvent(ChatEvent.SendMessage(text))
+                            }
                             text = ""
                         }
                     },

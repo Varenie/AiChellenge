@@ -20,6 +20,8 @@ import ru.varenie.aichellenge.domain.usecase.AgentStreamEvent
 import ru.varenie.aichellenge.domain.usecase.GenerateCodeAndTestsUseCase
 import ru.varenie.aichellenge.domain.usecase.SendCustomMessageUseCase
 import ru.varenie.aichellenge.domain.usecase.SendMessageUseCase
+import ru.varenie.aichellenge.data.remote.mcp.McpClient // Added import
+import ru.varenie.aichellenge.domain.models.McpRequest // Added import
 import javax.inject.Inject
 
 @HiltViewModel
@@ -27,8 +29,10 @@ class ChatViewModel @Inject constructor(
     private val sendMessageUseCase: SendMessageUseCase,
     private val sendCustomMessageUseCase: SendCustomMessageUseCase,
     private val generateCodeAndTestsUseCase: GenerateCodeAndTestsUseCase,
-    private val tokenCounter: TokenCounter
+    private val tokenCounter: TokenCounter,
+    private val mcpClient: McpClient // Injected McpClient
 ) : ViewModel() {
+
 
     private val models = listOf(
         Model("openai/gpt-oss-20b", "GPT- 20b"),
@@ -61,6 +65,9 @@ class ChatViewModel @Inject constructor(
             is ChatEvent.UpdateTemperature -> updateTemperature(event.temperature)
             is ChatEvent.SelectModel -> selectModel(event.model)
             is ChatEvent.ToggleModelSelector -> toggleModelSelector()
+            is ChatEvent.ConnectMcp -> connectToMcp(event.url)
+            is ChatEvent.DisconnectMcp -> disconnectFromMcp()
+            is ChatEvent.SendMcpMessage -> sendMcpMessage(event.text)
         }
     }
 
@@ -111,6 +118,7 @@ class ChatViewModel @Inject constructor(
                     ChatMode.TECH_SPEC -> handleTechSpecMode(text, userMessage)
                     ChatMode.CUSTOM -> handleCustomMode(text, userMessage)
                     ChatMode.MULTI_AGENT -> sendMessageForMultiAgent(text)
+                    ChatMode.MCP_CHAT -> sendMcpMessage(text) // Handle MCP_CHAT mode
                 }
             } catch (e: Exception) {
                 _state.update { it.copy(isLoading = false) }
@@ -223,13 +231,75 @@ class ChatViewModel @Inject constructor(
             it.copy(messages = newMessages)
         }
     }
+
+    private fun connectToMcp(url: String) {
+        viewModelScope.launch {
+            mcpClient.connect(url)
+        }
+    }
+
+    private fun disconnectFromMcp() {
+        viewModelScope.launch {
+            mcpClient.disconnect()
+        }
+    }
+
+    private fun sendMcpMessage(text: String) {
+        if (text.isBlank()) return
+
+        viewModelScope.launch {
+            val request = McpRequest(
+                id = java.util.UUID.randomUUID().toString(),
+                message = text,
+                timestamp = System.currentTimeMillis()
+            )
+            mcpClient.sendMessage(request)
+
+            _state.update {
+                it.copy(
+                    messages = it.messages + ChatUiMessage(
+                        text = text,
+                        agent = Agent.USER,
+                        inputTokens = 0 // Token count not relevant for MCP messages
+                    )
+                )
+            }
+        }
+    }
+
+    init {
+        viewModelScope.launch {
+            mcpClient.incomingMessages.collect { mcpResponse ->
+                _state.update {
+                    it.copy(
+                        messages = it.messages + ChatUiMessage(
+                            text = mcpResponse.response,
+                            agent = Agent.ASSISTANT,
+                            model = "MCP Server", // Or a specific MCP model if available
+                            responseTime = 0,
+                            outputTokens = 0
+                        )
+                    )
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            mcpClient.connectionState.collect { connectionState ->
+                _state.update {
+                    it.copy(mcpConnectionState = connectionState)
+                }
+            }
+        }
+    }
 }
 
 enum class ChatMode {
     DIET,
     TECH_SPEC,
     CUSTOM,
-    MULTI_AGENT
+    MULTI_AGENT,
+    MCP_CHAT
 }
 
 data class ChatState(
@@ -242,7 +312,8 @@ data class ChatState(
     val models: List<ru.varenie.aichellenge.domain.models.Model> = emptyList(),
     val selectedModel: ru.varenie.aichellenge.domain.models.Model? = null,
     val isModelSelectorVisible: Boolean = false,
-    val typingAgent: ru.varenie.aichellenge.domain.models.Agent? = null
+    val typingAgent: ru.varenie.aichellenge.domain.models.Agent? = null,
+    val mcpConnectionState: McpClient.ConnectionState = McpClient.ConnectionState.Disconnected
 )
 
 sealed class ChatEvent {
@@ -255,6 +326,9 @@ sealed class ChatEvent {
     data class UpdateTemperature(val temperature: Float) : ChatEvent()
     data class SelectModel(val model: ru.varenie.aichellenge.domain.models.Model) : ChatEvent()
     object ToggleModelSelector : ChatEvent()
+    data class ConnectMcp(val url: String) : ChatEvent()
+    object DisconnectMcp : ChatEvent()
+    data class SendMcpMessage(val text: String) : ChatEvent()
 }
 
 

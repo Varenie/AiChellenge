@@ -91,4 +91,9 @@ dependencies {
     implementation(libs.androidx.hilt.navigation.compose)
 
     implementation("com.knuddels:jtokkit:1.0.0")
+
+    // Kotlinx Serialization
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
+    // Kotlinx Coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
 }
